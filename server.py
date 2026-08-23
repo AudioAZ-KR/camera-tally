@@ -1,38 +1,41 @@
 """
-탈리 중계 서버
-- HTTP  : web/ 폴더의 탈리 페이지 서빙
-- WS    : /ws  브릿지(ATEM 상태 송신) <-> 스마트폰(수신) 중계
-실행: ./venv/bin/python server.py  (기본 포트 8080)
+탈리 중계 서버 (aiohttp)
+- HTTP : web/ 폴더의 탈리 페이지 서빙, /bridge.py 다운로드
+- WS   : /ws  브릿지(ATEM 상태 송신) <-> 스마트폰(수신) 중계, 방 코드별 격리
+실행: python server.py  (PORT 환경변수, 기본 8080)
 """
-import asyncio, json, os, sys, http, mimetypes
-from websockets.asyncio.server import serve
-from websockets.http11 import Response
-from websockets.datastructures import Headers
+import asyncio, json, os
+from aiohttp import web, WSMsgType
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8080))
-WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+BASE = os.path.dirname(os.path.abspath(__file__))
+WEB_DIR = os.path.join(BASE, "web")
+PORT = int(os.environ.get("PORT", 8080))
 
-rooms = {}          # room -> set(websocket)
-state = {}          # room -> {"program": n, "preview": n, "online": bool}
+rooms: dict[str, set] = {}   # room -> set(ws)
+state: dict[str, dict] = {}  # room -> {"program","preview","online"}
+OFFLINE = {"program": 0, "preview": 0, "online": False}
+
+def tally_msg(room):
+    return json.dumps({"type": "tally", **state.get(room, OFFLINE)})
 
 async def broadcast(room):
-    msg = json.dumps({"type": "tally", **state.get(room, {"program": 0, "preview": 0, "online": False})})
-    dead = []
-    for ws in rooms.get(room, set()):
+    msg = tally_msg(room)
+    for ws in list(rooms.get(room, ())):
         try:
-            await ws.send(msg)
+            await ws.send_str(msg)
         except Exception:
-            dead.append(ws)
-    for ws in dead:
-        rooms[room].discard(ws)
+            rooms[room].discard(ws)
 
-async def handler(ws):
-    room = None
-    is_bridge = False
+async def ws_handler(request):
+    ws = web.WebSocketResponse(heartbeat=20)
+    await ws.prepare(request)
+    room, is_bridge = None, False
     try:
-        async for raw in ws:
+        async for msg in ws:
+            if msg.type != WSMsgType.TEXT:
+                continue
             try:
-                data = json.loads(raw)
+                data = json.loads(msg.data)
             except Exception:
                 continue
             t = data.get("type")
@@ -42,51 +45,45 @@ async def handler(ws):
                 rooms.setdefault(room, set()).add(ws)
                 if is_bridge:
                     state[room] = {"program": 0, "preview": 0, "online": True}
-                    print(f"[bridge] joined room {room}")
+                    print(f"[bridge] joined {room}", flush=True)
                     await broadcast(room)
                 else:
-                    print(f"[phone ] joined room {room} ({len(rooms[room])} clients)")
-                    await ws.send(json.dumps({"type": "tally", **state.get(room, {"program": 0, "preview": 0, "online": False})}))
+                    print(f"[phone ] joined {room} ({len(rooms[room])} clients)", flush=True)
+                    await ws.send_str(tally_msg(room))
             elif t == "tally" and is_bridge and room:
                 state[room] = {"program": int(data.get("program", 0)),
                                "preview": int(data.get("preview", 0)), "online": True}
-                print(f"[{room}] PGM={state[room]['program']} PVW={state[room]['preview']}")
+                print(f"[{room}] PGM={state[room]['program']} PVW={state[room]['preview']}", flush=True)
                 await broadcast(room)
             elif t == "ping":
-                await ws.send('{"type":"pong"}')
+                await ws.send_str('{"type":"pong"}')
     finally:
         if room:
             rooms.get(room, set()).discard(ws)
             if is_bridge:
-                state[room] = {"program": 0, "preview": 0, "online": False}
-                print(f"[bridge] left room {room}")
+                state[room] = dict(OFFLINE)
+                print(f"[bridge] left {room}", flush=True)
                 await broadcast(room)
+    return ws
 
-def process_request(connection, request):
-    path = request.path.split("?")[0]
-    if path == "/ws":
-        return None  # WebSocket 업그레이드
-    if path == "/":
-        path = "/index.html"
-    if path == "/bridge.py":
-        fp = os.path.join(os.path.dirname(WEB_DIR), "bridge.py")
-    else:
-        fp = os.path.normpath(os.path.join(WEB_DIR, path.lstrip("/")))
-    if not (fp.startswith(WEB_DIR) or path == "/bridge.py") or not os.path.isfile(fp):
-        return connection.respond(http.HTTPStatus.NOT_FOUND, "not found")
-    ctype = mimetypes.guess_type(fp)[0] or "application/octet-stream"
-    with open(fp, "rb") as f:
-        body = f.read()
-    if ctype.startswith("text/") or "javascript" in ctype:
-        ctype += "; charset=utf-8"
-    headers = Headers([("Content-Type", ctype), ("Content-Length", str(len(body))),
-                       ("Cache-Control", "no-cache"), ("Connection", "close")])
-    return Response(200, "OK", headers, body)
+async def index(request):
+    return web.FileResponse(os.path.join(WEB_DIR, "index.html"), headers={"Cache-Control": "no-cache"})
 
-async def main():
-    async with serve(handler, "0.0.0.0", PORT, process_request=process_request):
-        print(f"탈리 서버 실행 중: http://0.0.0.0:{PORT}  (ws://…/ws)")
-        await asyncio.Future()
+async def bridge_file(request):
+    return web.FileResponse(os.path.join(BASE, "bridge.py"),
+                            headers={"Content-Type": "text/x-python; charset=utf-8",
+                                     "Content-Disposition": "attachment; filename=bridge.py"})
+
+async def health(request):
+    return web.json_response({"ok": True, "rooms": len(rooms)})
+
+app = web.Application()
+app.router.add_get("/", index)
+app.router.add_get("/ws", ws_handler)
+app.router.add_get("/bridge.py", bridge_file)
+app.router.add_get("/health", health)
+app.router.add_static("/", WEB_DIR, show_index=False)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    print(f"탈리 서버 실행 중: http://0.0.0.0:{PORT}", flush=True)
+    web.run_app(app, host="0.0.0.0", port=PORT, print=None)
