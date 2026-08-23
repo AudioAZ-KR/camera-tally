@@ -65,7 +65,7 @@ $('leave').onclick = () => { ws?.close(); clearInterval(pingTimer); $('tally').s
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onopen = () => { ws.send(JSON.stringify({type:'join', role:'phone', room})); $('conn').textContent = `방 ${room} · 연결됨`;
+  ws.onopen = () => { ws.send(JSON.stringify({type:'join', role:'phone', room, cam})); $('conn').textContent = `방 ${room} · 연결됨`;
     pingTimer = setInterval(()=>ws.readyState===1 && ws.send('{"type":"ping"}'), 15000); };
   ws.onmessage = e => { const d = JSON.parse(e.data); if (d.type === 'tally') render(d); };
   ws.onclose = () => { clearInterval(pingTimer); setTally('off', '연결 끊김'); $('conn').textContent = '재연결 중…'; setTimeout(connect, 2000); };
