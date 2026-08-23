@@ -14,33 +14,43 @@
   #setup h1 { font-size: 28px; margin-bottom: 8px; }
   #setup label { width: 100%; max-width: 320px; font-size: 14px; color: var(--muted); }
   #setup img { height: 36px; margin-bottom: 4px; }
-  .bot img { height: 16px; opacity: .8; vertical-align: middle; margin-right: 6px; }
   #setup input { width: 100%; margin-top: 6px; font-size: 22px; padding: 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-align: center; }
   #setup button { width: 100%; max-width: 320px; font-size: 20px; padding: 16px; border-radius: 10px; border: 0; background: var(--brand); color: #fff; font-weight: bold; }
-  #tally { display: none; height: 100%; flex-direction: column; justify-content: space-between; padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom); transition: background .1s; }
-  #tally.idle { background: var(--tally-idle); }
-  #tally.pvw  { background: var(--tally-pvw); }
-  #tally.pgm  { background: var(--tally-pgm); }
-  #tally.off  { background: var(--tally-off); }
-  .top { padding-top: 24px; text-align: center; font-size: 20px; opacity: .85; }
-  .top b { font-size: 28px; }
-  .mid { text-align: center; }
-  .mid .cam { font-size: 26vw; font-weight: 900; line-height: 1; }
-  .mid .status { font-size: 9vw; font-weight: 800; letter-spacing: .1em; margin-top: 10px; }
-  .bot { padding-bottom: 24px; display: flex; justify-content: space-between; font-size: 14px; opacity: .7; }
-  .bot button { background: none; border: 1px solid rgba(255,255,255,.5); color: #fff; padding: 6px 12px; border-radius: 6px; }
-  .info { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
-  .info .chip { background: rgba(0,0,0,.35); border-radius: 10px; padding: 6px 12px; font-size: 15px; font-variant-numeric: tabular-nums; }
-  .info .chip small { display: block; font-size: 10px; opacity: .7; letter-spacing: .08em; text-transform: uppercase; }
-  .info .chip b { font-size: 20px; }
-  .chip.warn b { color: #FFD166; }
-  .chip.over b { color: #FF6B6B; animation: blink 1s step-start infinite; }
-  .chip.hidden { display: none; }
+
+  /* ===== 탈리 화면: 위 50% 탈리 / 아래 50% 정보 ===== */
+  #tally { display: none; height: 100%; flex-direction: column; }
+  #light { flex: 0 0 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;
+           padding-top: env(safe-area-inset-top); transition: background .1s; }
+  #tally.idle #light { background: #1a2538; }
+  #tally.pvw  #light { background: var(--tally-pvw); }
+  #tally.pgm  #light { background: var(--tally-pgm); }
+  #tally.off  #light { background: var(--tally-off); }
+  #light .cam { font-size: min(28vh, 45vw); font-weight: 900; line-height: 1; }
+  #light .status { font-size: min(5.5vh, 9vw); font-weight: 800; letter-spacing: .12em; margin-top: 4px; }
+  #light .pgmpvw { position: absolute; top: calc(env(safe-area-inset-top) + 10px); left: 0; right: 0; text-align: center; font-size: 14px; opacity: .8; }
+  #light .pgmpvw b { font-size: 18px; }
+
+  #panel { flex: 0 0 50%; background: var(--bg); border-top: 1px solid var(--border); display: flex; flex-direction: column; padding: 12px 14px calc(env(safe-area-inset-bottom) + 10px); gap: 10px; overflow: hidden; }
+  .clock { text-align: center; }
+  .clock small { display: block; font-size: 11px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+  .clock b { font-size: min(9vh, 17vw); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.05; letter-spacing: .02em; }
+  .row2 { display: flex; gap: 10px; }
+  .tile { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; text-align: center; min-height: 64px; }
+  .tile small { display: block; font-size: 11px; color: var(--muted); letter-spacing: .08em; margin-bottom: 2px; }
+  .tile b { font-size: min(5vh, 9.5vw); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .tile.empty b { color: var(--muted); font-size: 3vh; font-weight: 500; }
+  .tile.warn b { color: #FFD166; }
+  .tile.over b { color: #FF6B6B; animation: blink 1s step-start infinite; }
   @keyframes blink { 50% { opacity: .3; } }
-  #msg { margin: 0 0 10px; padding: 14px 16px; background: rgba(0,0,0,.45); border-left: 5px solid #1877F2; border-radius: 10px; font-size: 20px; font-weight: 700; line-height: 1.35; word-break: keep-all; display: none; }
-  #msg.show { display: block; animation: pop .4s ease; }
-  #msg small { display: block; font-size: 11px; opacity: .65; font-weight: 400; margin-bottom: 4px; letter-spacing: .08em; }
-  @keyframes pop { 0% { transform: scale(.96); opacity: 0; } 100% { transform: none; opacity: 1; } }
+  #msg { flex: 1; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--brand); border-radius: 12px; padding: 10px 14px; overflow: auto; }
+  #msg small { display: block; font-size: 11px; color: var(--muted); letter-spacing: .08em; margin-bottom: 4px; }
+  #msg .t { font-size: min(3.6vh, 6vw); font-weight: 700; line-height: 1.3; word-break: keep-all; }
+  #msg.empty .t { color: var(--muted); font-weight: 400; font-size: 3vh; }
+  #msg.new { animation: pop .5s ease; }
+  @keyframes pop { 0% { background: var(--brand); } 100% { background: var(--surface); } }
+  .foot { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+  .foot img { height: 14px; opacity: .8; vertical-align: middle; margin-right: 6px; }
+  .foot button { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -51,18 +61,24 @@
   <label>내 카메라 번호<input id="cam" type="number" inputmode="numeric" placeholder="1" min="1" max="20"></label>
   <button id="go">접속</button>
 </div>
+
 <div id="tally" class="off">
-  <div class="top">현재 송출 <b id="pgmNo">-</b> &nbsp;·&nbsp; 대기 <span id="pvwNo">-</span>
-    <div class="info">
-      <div class="chip"><small>현재 시각</small><b id="clock">--:--:--</b></div>
-      <div class="chip hidden" id="targetChip"><small>목표 <span id="targetAt"></span> 까지</small><b id="targetLeft">--:--</b></div>
-      <div class="chip hidden" id="timerChip"><small>타이머</small><b id="timerLeft">--:--</b></div>
-    </div>
+  <div id="light">
+    <div class="pgmpvw">송출 <b id="pgmNo">-</b> &nbsp;·&nbsp; 대기 <b id="pvwNo">-</b></div>
+    <div class="cam" id="myCam">1</div>
+    <div class="status" id="status">연결 중</div>
   </div>
-  <div class="mid">
-    <div id="msg"><small>공지</small><span id="msgText"></span></div><div class="cam" id="myCam">1</div><div class="status" id="status">연결 중</div></div>
-  <div class="bot"><span><img src="/logo.svg" alt="" onerror="this.remove()"><span id="conn">서버 연결 중…</span></span><button id="leave">설정</button></div>
+  <div id="panel">
+    <div class="clock"><small>현재 시각</small><b id="clock">--:--:--</b></div>
+    <div class="row2">
+      <div class="tile empty" id="targetTile"><small id="targetLabel">목표 시각</small><b id="targetLeft">미설정</b></div>
+      <div class="tile empty" id="timerTile"><small>타이머</small><b id="timerLeft">미설정</b></div>
+    </div>
+    <div id="msg" class="empty"><small>공지</small><div class="t" id="msgText">공지 없음</div></div>
+    <div class="foot"><span><img src="/logo.svg" alt="" onerror="this.remove()"><span id="conn">서버 연결 중…</span></span><button id="leave">설정</button></div>
+  </div>
 </div>
+
 <script>
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -106,9 +122,9 @@ function setTally(cls, txt) { $('tally').className = cls; $('status').textConten
 let lastMsgTs = 0;
 function showMsg(d) {
   const box = $('msg');
-  if (!d.text) { box.classList.remove('show'); return; }
-  $('msgText').textContent = d.text; box.classList.add('show');
-  if (d.ts && d.ts !== lastMsgTs) { navigator.vibrate?.([100, 60, 100]); }
+  if (!d.text) { box.className = 'empty'; $('msgText').textContent = '공지 없음'; lastMsgTs = d.ts || 0; return; }
+  $('msgText').textContent = d.text; box.className = '';
+  if (d.ts && d.ts !== lastMsgTs) { navigator.vibrate?.([100, 60, 100]); box.classList.add('new'); setTimeout(() => box.classList.remove('new'), 600); }
   lastMsgTs = d.ts || 0;
 }
 
@@ -125,21 +141,19 @@ function tick() {
   const now = new Date();
   $('clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   const srvNow = Date.now() + clockOffset;
-  // 목표 시각
-  const tc = $('targetChip');
+  const tt = $('targetTile');
   if (timer.target) {
     const left = timer.target - srvNow, t = new Date(timer.target);
-    $('targetAt').textContent = `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+    $('targetLabel').textContent = `목표 ${pad(t.getHours())}:${pad(t.getMinutes())} 까지`;
     $('targetLeft').textContent = fmt(left, true);
-    tc.className = 'chip' + (left < 0 ? ' over' : left < 60000 ? ' warn' : '');
-  } else tc.className = 'chip hidden';
-  // 타이머
-  const tm = $('timerChip');
+    tt.className = 'tile' + (left < 0 ? ' over' : left < 60000 ? ' warn' : '');
+  } else { $('targetLabel').textContent = '목표 시각'; $('targetLeft').textContent = '미설정'; tt.className = 'tile empty'; }
+  const tm = $('timerTile');
   if (timer.running || timer.remain) {
     const left = timer.running ? timer.end - srvNow : timer.remain;
     $('timerLeft').textContent = fmt(Math.max(left, 0));
-    tm.className = 'chip' + (timer.running && left <= 0 ? ' over' : (timer.running && left < 10000 ? ' warn' : ''));
-  } else tm.className = 'chip hidden';
+    tm.className = 'tile' + (timer.running && left <= 0 ? ' over' : (timer.running && left < 10000 ? ' warn' : ''));
+  } else { $('timerLeft').textContent = '미설정'; tm.className = 'tile empty'; }
 }
 setInterval(tick, 250); tick();
 async function keepAwake() {
