@@ -16,6 +16,8 @@ PORT = int(os.environ.get("PORT", 8080))
 rooms: dict[str, set] = {}     # room -> set(ws)  (탈리 브로드캐스트 대상: 폰 + 브릿지)
 bridges: dict[str, set] = {}   # room -> set(ws)  (호스트/브릿지 연결)
 cams: dict[str, dict] = {}     # room -> {ws: cam_number}  (접속한 폰)
+seen: dict = {}                # ws -> 마지막 수신 시각 (응답 없는 폰 정리용)
+STALE_SEC = 25                 # 이 시간 동안 아무 메시지(ping 포함)가 없으면 접속 해제로 간주
 state: dict[str, dict] = {}    # room -> {"program","preview","online"}
 notes: dict[str, dict] = {}    # room -> {"text","ts"}              (공지 메시지)
 timers: dict[str, dict] = {}   # room -> {"running","end","remain","target"} (카운트다운 + 목표 시각, 서버 시각 기준 ms)
@@ -57,7 +59,7 @@ async def broadcast_roster(room):
             bridges[room].discard(ws)
 
 async def ws_handler(request):
-    ws = web.WebSocketResponse(heartbeat=20)
+    ws = web.WebSocketResponse(heartbeat=10)
     await ws.prepare(request)
     room, is_bridge = None, False
     try:
@@ -68,7 +70,10 @@ async def ws_handler(request):
                 data = json.loads(msg.data)
             except Exception:
                 continue
+            seen[ws] = time.time()
             t = data.get("type")
+            if t == "leave":                     # 폰이 명시적으로 나감 (번호 변경/페이지 닫기) → 즉시 현황 갱신
+                break
             if t == "join":
                 room = str(data.get("room", "")).strip().upper() or "DEFAULT"
                 is_bridge = data.get("role") == "bridge"
@@ -117,6 +122,7 @@ async def ws_handler(request):
             elif t == "ping":
                 await ws.send_str('{"type":"pong"}')
     finally:
+        seen.pop(ws, None)
         if room:
             rooms.get(room, set()).discard(ws)
             if is_bridge:
@@ -130,6 +136,24 @@ async def ws_handler(request):
                 await broadcast_roster(room)
     return ws
 
+async def reaper(app):
+    """응답 없는 폰을 주기적으로 정리해 접속 현황을 최신으로 유지"""
+    while True:
+        await asyncio.sleep(5)
+        now = time.time()
+        for room, d in list(cams.items()):
+            stale = [w for w in list(d) if now - seen.get(w, 0) > STALE_SEC]
+            for w in stale:
+                d.pop(w, None); rooms.get(room, set()).discard(w); seen.pop(w, None)
+                try: await w.close()
+                except Exception: pass
+            if stale:
+                print(f"[{room}] 응답 없는 폰 {len(stale)}대 정리", flush=True)
+                await broadcast_roster(room)
+
+async def start_bg(app):
+    app["reaper"] = asyncio.create_task(reaper(app))
+
 async def index(request):
     return web.FileResponse(os.path.join(WEB_DIR, "index.html"), headers={"Cache-Control": "no-cache"})
 
@@ -142,6 +166,7 @@ async def health(request):
     return web.json_response({"ok": True, "rooms": len(rooms)})
 
 app = web.Application()
+app.on_startup.append(start_bg)
 app.router.add_get("/", index)
 app.router.add_get("/ws", ws_handler)
 app.router.add_get("/bridge.py", bridge_file)
