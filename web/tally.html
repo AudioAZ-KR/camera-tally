@@ -29,6 +29,18 @@
   .mid .status { font-size: 9vw; font-weight: 800; letter-spacing: .1em; margin-top: 10px; }
   .bot { padding-bottom: 24px; display: flex; justify-content: space-between; font-size: 14px; opacity: .7; }
   .bot button { background: none; border: 1px solid rgba(255,255,255,.5); color: #fff; padding: 6px 12px; border-radius: 6px; }
+  .info { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+  .info .chip { background: rgba(0,0,0,.35); border-radius: 10px; padding: 6px 12px; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .info .chip small { display: block; font-size: 10px; opacity: .7; letter-spacing: .08em; text-transform: uppercase; }
+  .info .chip b { font-size: 20px; }
+  .chip.warn b { color: #FFD166; }
+  .chip.over b { color: #FF6B6B; animation: blink 1s step-start infinite; }
+  .chip.hidden { display: none; }
+  @keyframes blink { 50% { opacity: .3; } }
+  #msg { margin: 0 0 10px; padding: 14px 16px; background: rgba(0,0,0,.45); border-left: 5px solid #1877F2; border-radius: 10px; font-size: 20px; font-weight: 700; line-height: 1.35; word-break: keep-all; display: none; }
+  #msg.show { display: block; animation: pop .4s ease; }
+  #msg small { display: block; font-size: 11px; opacity: .65; font-weight: 400; margin-bottom: 4px; letter-spacing: .08em; }
+  @keyframes pop { 0% { transform: scale(.96); opacity: 0; } 100% { transform: none; opacity: 1; } }
 </style>
 </head>
 <body>
@@ -40,8 +52,15 @@
   <button id="go">접속</button>
 </div>
 <div id="tally" class="off">
-  <div class="top">현재 송출 <b id="pgmNo">-</b> &nbsp;·&nbsp; 대기 <span id="pvwNo">-</span></div>
-  <div class="mid"><div class="cam" id="myCam">1</div><div class="status" id="status">연결 중</div></div>
+  <div class="top">현재 송출 <b id="pgmNo">-</b> &nbsp;·&nbsp; 대기 <span id="pvwNo">-</span>
+    <div class="info">
+      <div class="chip"><small>현재 시각</small><b id="clock">--:--:--</b></div>
+      <div class="chip hidden" id="targetChip"><small>목표 <span id="targetAt"></span> 까지</small><b id="targetLeft">--:--</b></div>
+      <div class="chip hidden" id="timerChip"><small>타이머</small><b id="timerLeft">--:--</b></div>
+    </div>
+  </div>
+  <div class="mid">
+    <div id="msg"><small>공지</small><span id="msgText"></span></div><div class="cam" id="myCam">1</div><div class="status" id="status">연결 중</div></div>
   <div class="bot"><span><img src="/logo.svg" alt="" onerror="this.remove()"><span id="conn">서버 연결 중…</span></span><button id="leave">설정</button></div>
 </div>
 <script>
@@ -67,7 +86,10 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.onopen = () => { ws.send(JSON.stringify({type:'join', role:'phone', room, cam})); $('conn').textContent = `방 ${room} · 연결됨`;
     pingTimer = setInterval(()=>ws.readyState===1 && ws.send('{"type":"ping"}'), 15000); };
-  ws.onmessage = e => { const d = JSON.parse(e.data); if (d.type === 'tally') render(d); };
+  ws.onmessage = e => { const d = JSON.parse(e.data);
+    if (d.type === 'tally') render(d);
+    else if (d.type === 'msg') showMsg(d);
+    else if (d.type === 'timer') setTimer(d); };
   ws.onclose = () => { clearInterval(pingTimer); setTally('off', '연결 끊김'); $('conn').textContent = '재연결 중…'; setTimeout(connect, 2000); };
   ws.onerror = () => ws.close();
 }
@@ -79,6 +101,47 @@ function render(d) {
   else setTally('idle', '대기');
 }
 function setTally(cls, txt) { $('tally').className = cls; $('status').textContent = txt; }
+
+// ---- 공지 메시지 ----
+let lastMsgTs = 0;
+function showMsg(d) {
+  const box = $('msg');
+  if (!d.text) { box.classList.remove('show'); return; }
+  $('msgText').textContent = d.text; box.classList.add('show');
+  if (d.ts && d.ts !== lastMsgTs) { navigator.vibrate?.([100, 60, 100]); }
+  lastMsgTs = d.ts || 0;
+}
+
+// ---- 시계 / 목표 시각 / 타이머 ----
+let timer = { running: false, end: 0, remain: 0, target: 0 }, clockOffset = 0; // clockOffset = 서버시각 - 내 시각
+function setTimer(d) { timer = d; if (d.now) clockOffset = d.now - Date.now(); tick(); }
+const pad = n => String(n).padStart(2, '0');
+function fmt(ms, showH) {
+  const neg = ms < 0; ms = Math.abs(ms); const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return (neg ? '-' : '') + (h || showH ? `${h}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`);
+}
+function tick() {
+  const now = new Date();
+  $('clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const srvNow = Date.now() + clockOffset;
+  // 목표 시각
+  const tc = $('targetChip');
+  if (timer.target) {
+    const left = timer.target - srvNow, t = new Date(timer.target);
+    $('targetAt').textContent = `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+    $('targetLeft').textContent = fmt(left, true);
+    tc.className = 'chip' + (left < 0 ? ' over' : left < 60000 ? ' warn' : '');
+  } else tc.className = 'chip hidden';
+  // 타이머
+  const tm = $('timerChip');
+  if (timer.running || timer.remain) {
+    const left = timer.running ? timer.end - srvNow : timer.remain;
+    $('timerLeft').textContent = fmt(Math.max(left, 0));
+    tm.className = 'chip' + (timer.running && left <= 0 ? ' over' : (timer.running && left < 10000 ? ' warn' : ''));
+  } else tm.className = 'chip hidden';
+}
+setInterval(tick, 250); tick();
 async function keepAwake() {
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && keepAwake());
