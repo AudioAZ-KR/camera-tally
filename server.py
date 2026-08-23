@@ -3,9 +3,10 @@
 - HTTP : web/ 폴더의 탈리 페이지 서빙, /bridge.py 다운로드
 - WS   : /ws  브릿지(ATEM 상태 송신) <-> 스마트폰(수신) 중계, 방 코드별 격리
 - 접속 카메라 명단(roster)을 추적해 호스트(브릿지)로 전송
+- 호스트 공지 메시지(msg)·타이머(timer)를 방 단위로 보관하고 폰에 브로드캐스트 (늦게 접속한 폰도 현재 상태 수신)
 실행: python server.py  (PORT 환경변수, 기본 8080)
 """
-import asyncio, json, os
+import asyncio, json, os, time
 from aiohttp import web, WSMsgType
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +17,22 @@ rooms: dict[str, set] = {}     # room -> set(ws)  (탈리 브로드캐스트 대
 bridges: dict[str, set] = {}   # room -> set(ws)  (호스트/브릿지 연결)
 cams: dict[str, dict] = {}     # room -> {ws: cam_number}  (접속한 폰)
 state: dict[str, dict] = {}    # room -> {"program","preview","online"}
+notes: dict[str, dict] = {}    # room -> {"text","ts"}              (공지 메시지)
+timers: dict[str, dict] = {}   # room -> {"running","end","remain","target"} (카운트다운 + 목표 시각, 서버 시각 기준 ms)
 OFFLINE = {"program": 0, "preview": 0, "online": False}
+
+def now_ms(): return int(time.time() * 1000)
+
+def msg_msg(room):
+    n = notes.get(room, {"text": "", "ts": 0})
+    return json.dumps({"type": "msg", "text": n["text"], "ts": n["ts"]})
+
+EMPTY_TIMER = {"running": False, "end": 0, "remain": 0, "target": 0}
+
+def timer_msg(room):
+    t = {**EMPTY_TIMER, **timers.get(room, {})}
+    return json.dumps({"type": "timer", "running": t["running"], "end": t["end"], "remain": t["remain"],
+                       "target": t["target"], "now": now_ms()})
 
 def tally_msg(room):
     return json.dumps({"type": "tally", **state.get(room, OFFLINE)})
@@ -24,8 +40,8 @@ def tally_msg(room):
 def roster(room):
     return sorted(set(c for c in cams.get(room, {}).values() if c))
 
-async def broadcast(room):
-    msg = tally_msg(room)
+async def broadcast(room, msg=None):
+    msg = msg or tally_msg(room)
     for ws in list(rooms.get(room, ())):
         try:
             await ws.send_str(msg)
@@ -63,17 +79,41 @@ async def ws_handler(request):
                     print(f"[bridge] joined {room}", flush=True)
                     await broadcast(room)
                     await ws.send_str(json.dumps({"type": "roster", "cams": roster(room)}))
+                    await ws.send_str(msg_msg(room)); await ws.send_str(timer_msg(room))
                 else:
                     cam = int(data.get("cam", 0) or 0)
                     cams.setdefault(room, {})[ws] = cam
                     print(f"[phone ] joined {room} cam={cam} ({len(cams[room])} cams)", flush=True)
                     await ws.send_str(tally_msg(room))
+                    await ws.send_str(msg_msg(room))
+                    await ws.send_str(timer_msg(room))
                     await broadcast_roster(room)
             elif t == "tally" and is_bridge and room:
                 state[room] = {"program": int(data.get("program", 0)),
                                "preview": int(data.get("preview", 0)), "online": True}
                 print(f"[{room}] PGM={state[room]['program']} PVW={state[room]['preview']}", flush=True)
                 await broadcast(room)
+            elif t == "msg" and is_bridge and room:
+                text = str(data.get("text", ""))[:200]
+                notes[room] = {"text": text, "ts": now_ms()}
+                print(f"[{room}] MSG: {text}", flush=True)
+                await broadcast(room, msg_msg(room))
+            elif t == "timer" and is_bridge and room:
+                act = data.get("action"); cur = {**EMPTY_TIMER, **timers.get(room, {})}
+                tgt = cur["target"]
+                if act == "set":      # 새 카운트다운 설정(정지 상태)
+                    cur = {"running": False, "end": 0, "remain": max(0, int(data.get("seconds", 0))) * 1000, "target": tgt}
+                elif act == "start" and not cur["running"] and cur["remain"] > 0:
+                    cur = {"running": True, "end": now_ms() + cur["remain"], "remain": cur["remain"], "target": tgt}
+                elif act == "pause" and cur["running"]:
+                    cur = {"running": False, "end": 0, "remain": max(0, cur["end"] - now_ms()), "target": tgt}
+                elif act == "reset":
+                    cur = {"running": False, "end": 0, "remain": max(0, int(data.get("seconds", 0))) * 1000, "target": tgt}
+                elif act == "target":         # 목표 시각 설정 (epoch ms, 0이면 해제)
+                    cur["target"] = max(0, int(data.get("target_ms", 0)))
+                timers[room] = cur
+                print(f"[{room}] TIMER {act}: {cur}", flush=True)
+                await broadcast(room, timer_msg(room))
             elif t == "ping":
                 await ws.send_str('{"type":"pong"}')
     finally:
