@@ -2,6 +2,7 @@
 탈리 중계 서버 (aiohttp)
 - HTTP : web/ 폴더의 탈리 페이지 서빙, /bridge.py 다운로드
 - WS   : /ws  브릿지(ATEM 상태 송신) <-> 스마트폰(수신) 중계, 방 코드별 격리
+- 접속 카메라 명단(roster)을 추적해 호스트(브릿지)로 전송
 실행: python server.py  (PORT 환경변수, 기본 8080)
 """
 import asyncio, json, os
@@ -11,12 +12,17 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE, "web")
 PORT = int(os.environ.get("PORT", 8080))
 
-rooms: dict[str, set] = {}   # room -> set(ws)
-state: dict[str, dict] = {}  # room -> {"program","preview","online"}
+rooms: dict[str, set] = {}     # room -> set(ws)  (탈리 브로드캐스트 대상: 폰 + 브릿지)
+bridges: dict[str, set] = {}   # room -> set(ws)  (호스트/브릿지 연결)
+cams: dict[str, dict] = {}     # room -> {ws: cam_number}  (접속한 폰)
+state: dict[str, dict] = {}    # room -> {"program","preview","online"}
 OFFLINE = {"program": 0, "preview": 0, "online": False}
 
 def tally_msg(room):
     return json.dumps({"type": "tally", **state.get(room, OFFLINE)})
+
+def roster(room):
+    return sorted(set(c for c in cams.get(room, {}).values() if c))
 
 async def broadcast(room):
     msg = tally_msg(room)
@@ -25,6 +31,14 @@ async def broadcast(room):
             await ws.send_str(msg)
         except Exception:
             rooms[room].discard(ws)
+
+async def broadcast_roster(room):
+    msg = json.dumps({"type": "roster", "cams": roster(room)})
+    for ws in list(bridges.get(room, ())):
+        try:
+            await ws.send_str(msg)
+        except Exception:
+            bridges[room].discard(ws)
 
 async def ws_handler(request):
     ws = web.WebSocketResponse(heartbeat=20)
@@ -44,12 +58,17 @@ async def ws_handler(request):
                 is_bridge = data.get("role") == "bridge"
                 rooms.setdefault(room, set()).add(ws)
                 if is_bridge:
+                    bridges.setdefault(room, set()).add(ws)
                     state[room] = {"program": 0, "preview": 0, "online": True}
                     print(f"[bridge] joined {room}", flush=True)
                     await broadcast(room)
+                    await ws.send_str(json.dumps({"type": "roster", "cams": roster(room)}))
                 else:
-                    print(f"[phone ] joined {room} ({len(rooms[room])} clients)", flush=True)
+                    cam = int(data.get("cam", 0) or 0)
+                    cams.setdefault(room, {})[ws] = cam
+                    print(f"[phone ] joined {room} cam={cam} ({len(cams[room])} cams)", flush=True)
                     await ws.send_str(tally_msg(room))
+                    await broadcast_roster(room)
             elif t == "tally" and is_bridge and room:
                 state[room] = {"program": int(data.get("program", 0)),
                                "preview": int(data.get("preview", 0)), "online": True}
@@ -61,9 +80,14 @@ async def ws_handler(request):
         if room:
             rooms.get(room, set()).discard(ws)
             if is_bridge:
+                bridges.get(room, set()).discard(ws)
                 state[room] = dict(OFFLINE)
                 print(f"[bridge] left {room}", flush=True)
                 await broadcast(room)
+            else:
+                cams.get(room, {}).pop(ws, None)
+                print(f"[phone ] left {room}", flush=True)
+                await broadcast_roster(room)
     return ws
 
 async def index(request):
