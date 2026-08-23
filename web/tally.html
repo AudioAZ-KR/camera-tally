@@ -72,7 +72,7 @@
     <div class="clock"><small>현재 시각</small><b id="clock">--:--:--</b></div>
     <div class="row2">
       <div class="tile empty" id="targetTile"><small id="targetLabel">목표 시각</small><b id="targetLeft">미설정</b></div>
-      <div class="tile empty" id="timerTile"><small>타이머</small><b id="timerLeft">미설정</b></div>
+      <div class="tile empty" id="timerTile"><small id="timerLabel">타이머</small><b id="timerLeft">미설정</b></div>
     </div>
     <div id="msg" class="empty"><small>공지</small><div class="t" id="msgText">공지 없음</div></div>
     <div class="foot"><span><img src="/logo.svg" alt="" onerror="this.remove()"><span id="conn">서버 연결 중…</span></span><button id="leave">설정</button></div>
@@ -133,9 +133,10 @@ let timer = { running: false, end: 0, remain: 0, target: 0 }, clockOffset = 0; /
 function setTimer(d) { timer = d; if (d.now) clockOffset = d.now - Date.now(); tick(); }
 const pad = n => String(n).padStart(2, '0');
 function fmt(ms, showH) {
-  const neg = ms < 0; ms = Math.abs(ms); const s = Math.floor(ms / 1000);
+  // 초과(음수)는 "+MM:SS" 로 초과 시간을 표시
+  const over = ms < 0; ms = Math.abs(ms); const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
-  return (neg ? '-' : '') + (h || showH ? `${h}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`);
+  return (over ? '+' : '') + (h || showH ? `${h}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`);
 }
 function tick() {
   const now = new Date();
@@ -144,16 +145,17 @@ function tick() {
   const tt = $('targetTile');
   if (timer.target) {
     const left = timer.target - srvNow, t = new Date(timer.target);
-    $('targetLabel').textContent = `목표 ${pad(t.getHours())}:${pad(t.getMinutes())} 까지`;
+    $('targetLabel').textContent = left < 0 ? `목표 ${pad(t.getHours())}:${pad(t.getMinutes())} 초과` : `목표 ${pad(t.getHours())}:${pad(t.getMinutes())} 까지`;
     $('targetLeft').textContent = fmt(left, true);
     tt.className = 'tile' + (left < 0 ? ' over' : left < 60000 ? ' warn' : '');
   } else { $('targetLabel').textContent = '목표 시각'; $('targetLeft').textContent = '미설정'; tt.className = 'tile empty'; }
   const tm = $('timerTile');
   if (timer.running || timer.remain) {
     const left = timer.running ? timer.end - srvNow : timer.remain;
-    $('timerLeft').textContent = fmt(Math.max(left, 0));
+    $('timerLeft').textContent = fmt(left);                       // 0 아래로 내려가면 +초과시간
+    $('timerLabel').textContent = (timer.running && left < 0) ? '타이머 초과' : '타이머';
     tm.className = 'tile' + (timer.running && left <= 0 ? ' over' : (timer.running && left < 10000 ? ' warn' : ''));
-  } else { $('timerLeft').textContent = '미설정'; tm.className = 'tile empty'; }
+  } else { $('timerLeft').textContent = '미설정'; $('timerLabel').textContent = '타이머'; tm.className = 'tile empty'; }
 }
 setInterval(tick, 250); tick();
 async function keepAwake() {
