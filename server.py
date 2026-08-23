@@ -165,13 +165,18 @@ async def bridge_file(request):
 async def health(request):
     return web.json_response({"ok": True, "rooms": len(rooms)})
 
-app = web.Application()
-app.on_startup.append(start_bg)
-app.router.add_get("/", index)
-app.router.add_get("/ws", ws_handler)
-app.router.add_get("/bridge.py", bridge_file)
-app.router.add_get("/health", health)
-app.router.add_static("/", WEB_DIR, show_index=False)
+def make_app():
+    """aiohttp Application은 이벤트 루프에 묶이므로, 내장 서버(호스트 앱)에서는 시작할 때마다 새로 만든다"""
+    a = web.Application()
+    a.on_startup.append(start_bg)
+    a.router.add_get("/", index)
+    a.router.add_get("/ws", ws_handler)
+    a.router.add_get("/bridge.py", bridge_file)
+    a.router.add_get("/health", health)
+    a.router.add_static("/", WEB_DIR, show_index=False)
+    return a
+
+app = make_app()
 
 if __name__ == "__main__":
     print(f"탈리 서버 실행 중: http://0.0.0.0:{PORT}", flush=True)
