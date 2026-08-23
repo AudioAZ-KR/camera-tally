@@ -22,27 +22,3 @@
 .brand-bar .tag { margin-left: auto; font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
 .brand-foot { margin-top: 28px; text-align: center; font-size: 12px; color: var(--muted); }
 .brand-foot b { color: var(--brand); }
-/* ===== AudioAZ 브랜드 테마 =====
-   로고: web/logo.svg 교체 (없으면 텍스트 로고 표시)
-   색상: 아래 변수만 바꾸면 전체 페이지에 적용됨 */
-:root {
-  --brand:        #00C2FF;   /* 메인 브랜드 색 (버튼, 강조) */
-  --brand-dark:   #0096C7;
-  --bg:           #0B1220;   /* 페이지 배경 (다크 네이비) */
-  --surface:      #131C2E;   /* 카드 배경 */
-  --border:       #233049;
-  --text:         #EAF2FF;
-  --muted:        #8FA3C2;
-  --tally-pgm:    #E10600;   /* ON AIR */
-  --tally-pvw:    #00A651;   /* PREVIEW */
-  --tally-idle:   #0B1220;
-  --tally-off:    #3A4356;
-  --font: "Pretendard", -apple-system, "Apple SD Gothic Neo", system-ui, sans-serif;
-}
-.brand-bar { display: flex; align-items: center; gap: 10px; padding: 4px 0 18px; }
-.brand-bar img { height: 28px; width: auto; }
-.brand-bar .wordmark { font-weight: 900; letter-spacing: .06em; font-size: 18px; color: var(--text); }
-.brand-bar .wordmark b { color: var(--brand); }
-.brand-bar .tag { margin-left: auto; font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
-.brand-foot { margin-top: 28px; text-align: center; font-size: 12px; color: var(--muted); }
-.brand-foot b { color: var(--brand); }
