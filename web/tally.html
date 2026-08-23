@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>탈리</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #111; color: #fff; font-family: -apple-system, system-ui, sans-serif; overflow: hidden; }
+  #setup { height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; padding: 24px; }
+  #setup h1 { font-size: 28px; margin-bottom: 8px; }
+  #setup label { width: 100%; max-width: 320px; font-size: 14px; color: #aaa; }
+  #setup input { width: 100%; margin-top: 6px; font-size: 22px; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff; text-align: center; }
+  #setup button { width: 100%; max-width: 320px; font-size: 20px; padding: 16px; border-radius: 10px; border: 0; background: #e33; color: #fff; font-weight: bold; }
+  #tally { display: none; height: 100%; flex-direction: column; justify-content: space-between; padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom); transition: background .1s; }
+  #tally.idle { background: #111; }
+  #tally.pvw  { background: #0a0; }
+  #tally.pgm  { background: #e00; }
+  #tally.off  { background: #444; }
+  .top { padding-top: 24px; text-align: center; font-size: 20px; opacity: .85; }
+  .top b { font-size: 28px; }
+  .mid { text-align: center; }
+  .mid .cam { font-size: 26vw; font-weight: 900; line-height: 1; }
+  .mid .status { font-size: 9vw; font-weight: 800; letter-spacing: .1em; margin-top: 10px; }
+  .bot { padding-bottom: 24px; display: flex; justify-content: space-between; font-size: 14px; opacity: .7; }
+  .bot button { background: none; border: 1px solid rgba(255,255,255,.5); color: #fff; padding: 6px 12px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div id="setup">
+  <h1>📹 카메라 탈리</h1>
+  <label>방 코드<input id="room" placeholder="STUDIO" autocapitalize="characters"></label>
+  <label>내 카메라 번호<input id="cam" type="number" inputmode="numeric" placeholder="1" min="1" max="20"></label>
+  <button id="go">접속</button>
+</div>
+<div id="tally" class="off">
+  <div class="top">현재 송출 <b id="pgmNo">-</b> &nbsp;·&nbsp; 대기 <span id="pvwNo">-</span></div>
+  <div class="mid"><div class="cam" id="myCam">1</div><div class="status" id="status">연결 중</div></div>
+  <div class="bot"><span id="conn">서버 연결 중…</span><button id="leave">설정</button></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+$('room').value = qs.get('room') || localStorage.room || '';
+$('cam').value  = qs.get('cam')  || localStorage.cam  || '';
+let ws, room, cam, wakeLock, pingTimer;
+
+$('go').onclick = () => {
+  room = $('room').value.trim().toUpperCase() || 'DEFAULT';
+  cam  = parseInt($('cam').value) || 1;
+  localStorage.room = room; localStorage.cam = cam;
+  $('setup').style.display = 'none'; $('tally').style.display = 'flex';
+  $('myCam').textContent = cam;
+  connect(); keepAwake();
+  document.documentElement.requestFullscreen?.().catch(()=>{});
+};
+$('leave').onclick = () => { ws?.close(); clearInterval(pingTimer); $('tally').style.display='none'; $('setup').style.display='flex'; };
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => { ws.send(JSON.stringify({type:'join', role:'phone', room})); $('conn').textContent = `방 ${room} · 연결됨`;
+    pingTimer = setInterval(()=>ws.readyState===1 && ws.send('{"type":"ping"}'), 15000); };
+  ws.onmessage = e => { const d = JSON.parse(e.data); if (d.type === 'tally') render(d); };
+  ws.onclose = () => { clearInterval(pingTimer); setTally('off', '연결 끊김'); $('conn').textContent = '재연결 중…'; setTimeout(connect, 2000); };
+  ws.onerror = () => ws.close();
+}
+function render(d) {
+  $('pgmNo').textContent = d.program || '-'; $('pvwNo').textContent = d.preview || '-';
+  if (!d.online) return setTally('off', 'ATEM 오프라인');
+  if (d.program === cam) { setTally('pgm', 'ON AIR'); navigator.vibrate?.(200); }
+  else if (d.preview === cam) setTally('pvw', 'PREVIEW');
+  else setTally('idle', '대기');
+}
+function setTally(cls, txt) { $('tally').className = cls; $('status').textContent = txt; }
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && keepAwake());
+}
+if ($('room').value && $('cam').value && qs.get('auto')) $('go').click();
+</script>
+</body>
+</html>
