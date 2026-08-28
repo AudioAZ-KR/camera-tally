@@ -60,13 +60,13 @@
   /* 테두리(네온) 모드: 탈리 칸(#light) 안에만 발광 테두리. 아래 정보 패널에는 안 들어감 */
   #frame { display:none; }
   #tally.mode-border #light { background:var(--bg) !important; transition:box-shadow .18s ease, background .1s; }
-  /* LED 발광 테두리: 선명한 띠 + 안쪽으로 번지는 글로우 */
-  #tally.mode-border.pgm  #light { box-shadow:inset 0 0 0 7px var(--tally-pgm), inset 0 0 42px 2px var(--tally-pgm), inset 0 0 90px 8px color-mix(in srgb, var(--tally-pgm) 55%, transparent); }
-  #tally.mode-border.pvw  #light { box-shadow:inset 0 0 0 7px var(--tally-pvw), inset 0 0 42px 2px var(--tally-pvw), inset 0 0 90px 8px color-mix(in srgb, var(--tally-pvw) 55%, transparent); }
-  #tally.mode-border.idle #light { box-shadow:inset 0 0 0 4px #34405e, inset 0 0 26px 1px rgba(52,64,94,.6); }
+  /* LED 발광 테두리: 선명한 띠 + 안쪽으로 은은하게 번지는 글로우 */
+  #tally.mode-border.pgm  #light { box-shadow:inset 0 0 0 7px var(--tally-pgm), inset 0 0 13px 1px var(--tally-pgm), inset 0 0 27px 3px color-mix(in srgb, var(--tally-pgm) 55%, transparent); }
+  #tally.mode-border.pvw  #light { box-shadow:inset 0 0 0 7px var(--tally-pvw), inset 0 0 13px 1px var(--tally-pvw), inset 0 0 27px 3px color-mix(in srgb, var(--tally-pvw) 55%, transparent); }
+  #tally.mode-border.idle #light { box-shadow:inset 0 0 0 4px #34405e, inset 0 0 8px 0 rgba(52,64,94,.6); }
   #tally.mode-border.off  #light { box-shadow:inset 0 0 0 4px var(--tally-off); }
-  #tally.mode-border.pgm  #light .cam, #tally.mode-border.pgm  #light .status { color:var(--tally-pgm); text-shadow:0 0 22px color-mix(in srgb, var(--tally-pgm) 70%, transparent); }
-  #tally.mode-border.pvw  #light .cam, #tally.mode-border.pvw  #light .status { color:var(--tally-pvw); text-shadow:0 0 22px color-mix(in srgb, var(--tally-pvw) 70%, transparent); }
+  #tally.mode-border.pgm  #light .cam, #tally.mode-border.pgm  #light .status { color:var(--tally-pgm); text-shadow:0 0 7px color-mix(in srgb, var(--tally-pgm) 70%, transparent); }
+  #tally.mode-border.pvw  #light .cam, #tally.mode-border.pvw  #light .status { color:var(--tally-pvw); text-shadow:0 0 7px color-mix(in srgb, var(--tally-pvw) 70%, transparent); }
   #tally.mode-border.idle #light .cam { color:var(--muted); }
   #tally.mode-border #styleToggle { margin-right:6px; }
 
@@ -183,6 +183,7 @@ function render(d) {
 }
 function setTally(cls, txt) { curState = cls; $('tally').className = cls + (dispStyle === 'border' ? ' mode-border' : ''); $('status').textContent = txt; }
 
+// ---- 공지 메시지 ----
 let lastMsgTs = 0;
 function showMsg(d) {
   const box = $('msg');
@@ -192,10 +193,12 @@ function showMsg(d) {
   lastMsgTs = d.ts || 0;
 }
 
-let timer = { running: false, end: 0, remain: 0, target: 0 }, clockOffset = 0;
+// ---- 시계 / 목표 시각 / 타이머 ----
+let timer = { running: false, end: 0, remain: 0, target: 0 }, clockOffset = 0; // clockOffset = 서버시각 - 내 시각
 function setTimer(d) { timer = d; if (d.now) clockOffset = d.now - Date.now(); tick(); }
 const pad = n => String(n).padStart(2, '0');
 function fmt(ms, showH) {
+  // 초과(음수)는 "+MM:SS" 로 초과 시간을 표시
   const over = ms < 0; ms = Math.abs(ms); const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
   return (over ? '+' : '') + (h || showH ? `${h}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`);
@@ -214,7 +217,7 @@ function tick() {
   const tm = $('timerTile');
   if (timer.running || timer.remain) {
     const left = timer.running ? timer.end - srvNow : timer.remain;
-    $('timerLeft').textContent = fmt(left);
+    $('timerLeft').textContent = fmt(left);                       // 0 아래로 내려가면 +초과시간
     $('timerLabel').textContent = (timer.running && left < 0) ? '타이머 초과' : '타이머';
     tm.className = 'tile' + (timer.running && left <= 0 ? ' over' : (timer.running && left < 10000 ? ' warn' : ''));
   } else { $('timerLeft').textContent = '미설정'; $('timerLabel').textContent = '타이머'; tm.className = 'tile empty'; }
