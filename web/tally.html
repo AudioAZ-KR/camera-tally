@@ -57,15 +57,16 @@
   .seg { flex:1; background:var(--surface); color:var(--muted); border:0; padding:12px 0; font-size:16px; font-weight:bold; cursor:pointer; }
   .seg.on { background:var(--brand); color:#fff; }
 
-  /* 테두리 모드: 화면은 어둡게, 가장자리 테두리로만 탈리 표시 (객석 눈부심 최소화) */
-  #frame { position:fixed; inset:0; pointer-events:none; border:0 solid transparent; z-index:60; transition:border-color .12s; }
-  #tally.mode-border #light { background:var(--bg) !important; }
-  #tally.mode-border.pgm  #frame { border-width:18px; border-color:var(--tally-pgm); }
-  #tally.mode-border.pvw  #frame { border-width:18px; border-color:var(--tally-pvw); }
-  #tally.mode-border.idle #frame { border-width:12px; border-color:#2a3550; }
-  #tally.mode-border.off  #frame { border-width:12px; border-color:var(--tally-off); }
-  #tally.mode-border.pgm  #light .cam, #tally.mode-border.pgm  #light .status { color:var(--tally-pgm); }
-  #tally.mode-border.pvw  #light .cam, #tally.mode-border.pvw  #light .status { color:var(--tally-pvw); }
+  /* 테두리(네온) 모드: 탈리 칸(#light) 안에만 발광 테두리. 아래 정보 패널에는 안 들어감 */
+  #frame { display:none; }
+  #tally.mode-border #light { background:var(--bg) !important; transition:box-shadow .18s ease, background .1s; }
+  /* LED 발광 테두리: 선명한 띠 + 안쪽으로 번지는 글로우 */
+  #tally.mode-border.pgm  #light { box-shadow:inset 0 0 0 7px var(--tally-pgm), inset 0 0 42px 2px var(--tally-pgm), inset 0 0 90px 8px color-mix(in srgb, var(--tally-pgm) 55%, transparent); }
+  #tally.mode-border.pvw  #light { box-shadow:inset 0 0 0 7px var(--tally-pvw), inset 0 0 42px 2px var(--tally-pvw), inset 0 0 90px 8px color-mix(in srgb, var(--tally-pvw) 55%, transparent); }
+  #tally.mode-border.idle #light { box-shadow:inset 0 0 0 4px #34405e, inset 0 0 26px 1px rgba(52,64,94,.6); }
+  #tally.mode-border.off  #light { box-shadow:inset 0 0 0 4px var(--tally-off); }
+  #tally.mode-border.pgm  #light .cam, #tally.mode-border.pgm  #light .status { color:var(--tally-pgm); text-shadow:0 0 22px color-mix(in srgb, var(--tally-pgm) 70%, transparent); }
+  #tally.mode-border.pvw  #light .cam, #tally.mode-border.pvw  #light .status { color:var(--tally-pvw); text-shadow:0 0 22px color-mix(in srgb, var(--tally-pvw) 70%, transparent); }
   #tally.mode-border.idle #light .cam { color:var(--muted); }
   #tally.mode-border #styleToggle { margin-right:6px; }
 
@@ -103,7 +104,7 @@
   <label>표시 스타일
     <div class="segmt">
       <button type="button" class="seg" id="styleFull">전체화면</button>
-      <button type="button" class="seg" id="styleBorder">테두리만</button>
+      <button type="button" class="seg" id="styleBorder">테두리(네온)</button>
     </div>
   </label>
   <button id="go">접속</button>
