@@ -10,12 +10,17 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; }
-  #setup { height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; padding: 24px; }
+  #setup { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; padding: 24px; }
   #setup h1 { font-size: 28px; margin-bottom: 8px; }
   #setup label { width: 100%; max-width: 320px; font-size: 14px; color: var(--muted); }
   #setup img { height: 36px; margin-bottom: 4px; }
   #setup input { width: 100%; margin-top: 6px; font-size: 22px; padding: 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-align: center; }
-  #setup button { width: 100%; max-width: 320px; font-size: 20px; padding: 16px; border-radius: 10px; border: 0; background: var(--brand); color: #fff; font-weight: bold; }
+  #setup button#go { width: 100%; max-width: 320px; font-size: 20px; padding: 16px; border-radius: 10px; border: 0; background: var(--brand); color: #fff; font-weight: bold; }
+  .langseg { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .langseg .lbl { font-size: 12px; }
+  .langseg button { background: var(--surface); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: bold; cursor: pointer; }
+  .langseg button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  #setup .langseg { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 16px; }
 
   /* ===== 탈리 화면: 위 50% 탈리 / 아래 50% 정보 ===== */
   #tally { display: none; height: 100%; flex-direction: column; }
@@ -65,8 +70,7 @@
   #tally.mode-border.idle #light .cam { color:var(--muted); }
   #tally.mode-border #styleToggle { margin-right:6px; }
 
-  /* ===== 아이폰 가로모드: 좌(탈리) / 우(시각·타이머·공지) =====
-     높이가 낮은 기기(폰)에서만 적용 — 아이패드는 세로 분할 유지 */
+  /* ===== 아이폰 가로모드: 좌(탈리) / 우(시각·타이머·공지) ===== */
   @media (orientation: landscape) and (max-height: 500px) {
     #tally { flex-direction: row; }
     #light { flex: 0 0 50%; height: 100%; padding-top: 0; padding-left: env(safe-area-inset-left); }
@@ -92,43 +96,98 @@
 </head>
 <body>
 <div id="setup">
+  <div class="langseg"><span class="lbl">Language</span><button data-l="en">EN</button><button data-l="ko">KR</button></div>
   <img src="/logo.svg" alt="AudioAZ" onerror="this.remove()">
-  <h1>카메라 탈리</h1>
-  <label>방 코드<input id="room" placeholder="STUDIO" autocapitalize="characters"></label>
-  <label>내 카메라 번호<input id="cam" type="number" inputmode="numeric" placeholder="1" min="1" max="20"></label>
+  <h1 id="lblTitle">카메라 탈리</h1>
+  <label><span id="lblRoom">방 코드</span><input id="room" placeholder="STUDIO" autocapitalize="characters"></label>
+  <label><span id="lblCam">내 카메라 번호</span><input id="cam" type="number" inputmode="numeric" placeholder="1" min="1" max="20"></label>
   <button id="go">접속</button>
 </div>
 
 <div id="tally" class="off">
   <div id="frame"></div>
   <div id="light">
-    <div class="pgmpvw">송출 <b id="pgmNo">-</b> &nbsp;·&nbsp; 대기 <b id="pvwNo">-</b></div>
+    <div class="pgmpvw"><span id="lblSend">송출</span> <b id="pgmNo">-</b> &nbsp;·&nbsp; <span id="lblWait">대기</span> <b id="pvwNo">-</b></div>
     <div class="cam" id="myCam">1</div>
     <div class="status" id="status">연결 중</div>
   </div>
   <div id="panel">
-    <div class="clock"><small>현재 시각</small><b id="clock">--:--:--</b></div>
+    <div class="clock"><small id="lblClock">현재 시각</small><b id="clock">--:--:--</b></div>
     <div class="row2">
       <div class="tile empty" id="targetTile"><small id="targetLabel">목표 시각</small><b id="targetLeft">미설정</b></div>
       <div class="tile empty" id="timerTile"><small id="timerLabel">타이머</small><b id="timerLeft">미설정</b></div>
     </div>
-    <div id="msg" class="empty"><small>공지</small><div class="t" id="msgText">공지 없음</div></div>
-    <div class="foot"><span><img src="/logo.svg" alt="" onerror="this.remove()"><span id="conn">서버 연결 중…</span></span><span><button id="styleToggle">테두리</button><button id="leave">설정</button></span></div>
+    <div id="msg" class="empty"><small id="lblNotice">공지</small><div class="t" id="msgText">공지 없음</div></div>
+    <div class="foot"><span><img src="/logo.svg" alt="" onerror="this.remove()"><span id="conn">서버 연결 중…</span></span><span><span class="langseg"><button data-l="en">EN</button><button data-l="ko">KR</button></span><button id="styleToggle">테두리</button><button id="leave">설정</button></span></div>
   </div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
+
+// ===== 다국어(한국어/English) =====
+const I18N = {
+  ko: { title:'카메라 탈리', room:'방 코드', cam:'내 카메라 번호', connect:'접속',
+        send:'송출', wait:'대기', connecting:'연결 중', onair:'ON AIR', preview:'PREVIEW', standby:'대기',
+        disconnected:'연결 끊김', atemOff:'ATEM 오프라인', reconnecting:'재연결 중…',
+        clock:'현재 시각', targetTime:'목표 시각', timer:'타이머', timerOver:'타이머 초과', unset:'미설정',
+        notice:'공지', noNotice:'공지 없음', connServer:'서버 연결 중…',
+        settings:'설정', border:'테두리', full:'전체화면', langLabel:'EN',
+        roomWord:'방', connectedWord:'연결됨', onlineWord:'🌐 온라인', offlineWord:'📡 오프라인(같은 Wi-Fi)',
+        targetWord:'목표', untilWord:'까지', overWord:'초과' },
+  en: { title:'Camera Tally', room:'Room Code', cam:'My Camera No.', connect:'Connect',
+        send:'PGM', wait:'PVW', connecting:'Connecting', onair:'ON AIR', preview:'PREVIEW', standby:'Standby',
+        disconnected:'Disconnected', atemOff:'ATEM Offline', reconnecting:'Reconnecting…',
+        clock:'Current Time', targetTime:'Target Time', timer:'Timer', timerOver:'Timer Over', unset:'Not set',
+        notice:'Notice', noNotice:'No notice', connServer:'Connecting…',
+        settings:'Setup', border:'Border', full:'Fullscreen', langLabel:'한국어',
+        roomWord:'Room', connectedWord:'Connected', onlineWord:'🌐 Online', offlineWord:'📡 Offline (same Wi-Fi)',
+        targetWord:'Target', untilWord:'left', overWord:'over' }
+};
+let lang = (localStorage.lang === 'ko') ? 'ko' : 'en';   // 처음 열면 영어 기본
+const t = k => I18N[lang][k];
+
 $('room').value = qs.get('room') || localStorage.room || '';
 $('cam').value  = qs.get('cam')  || localStorage.cam  || '';
 let ws, room, cam, wakeLock, pingTimer;
-let dispStyle = localStorage.dispStyle || 'full', curState = 'off';
+let dispStyle = localStorage.dispStyle || 'full', curState = 'off', curStatusKey = 'connecting';
+let connMode = null;
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  $('lblTitle').textContent = t('title');
+  $('lblRoom').textContent = t('room');
+  $('lblCam').textContent = t('cam');
+  $('go').textContent = t('connect');
+  $('lblSend').textContent = t('send');
+  $('lblWait').textContent = t('wait');
+  $('lblClock').textContent = t('clock');
+  $('lblNotice').textContent = t('notice');
+  $('leave').textContent = t('settings');
+  renderLangSeg();
+  $('status').textContent = t(curStatusKey);
+  applyStyle();
+  renderConn();
+  if ($('msg').classList.contains('empty')) $('msgText').textContent = t('noNotice');
+  tick();
+}
+function setLang(l) { lang = l; localStorage.lang = l; applyLang(); }
+function renderLangSeg() { document.querySelectorAll('.langseg button').forEach(b => b.classList.toggle('on', b.dataset.l === lang)); }
+document.querySelectorAll('.langseg button').forEach(b => b.onclick = () => setLang(b.dataset.l));
+
 function applyStyle() {
   $('tally').className = curState + (dispStyle === 'border' ? ' mode-border' : '');
-  if ($('styleToggle')) $('styleToggle').textContent = (dispStyle === 'border') ? '전체화면' : '테두리';
+  if ($('styleToggle')) $('styleToggle').textContent = (dispStyle === 'border') ? t('full') : t('border');
 }
 function setStyle(v) { dispStyle = v; localStorage.dispStyle = v; applyStyle(); }
+$('styleToggle').onclick = () => setStyle(dispStyle === 'border' ? 'full' : 'border');
+
+function renderConn() {
+  if (connMode === null) { $('conn').textContent = t('connServer'); return; }
+  const modeTxt = connMode === 'online' ? t('onlineWord') : t('offlineWord');
+  $('conn').textContent = `${t('roomWord')} ${room} · ${t('connectedWord')} · ${modeTxt}`;
+}
 
 $('go').onclick = () => {
   room = $('room').value.trim().toUpperCase() || 'DEFAULT';
@@ -140,7 +199,6 @@ $('go').onclick = () => {
   document.documentElement.requestFullscreen?.().catch(()=>{});
 };
 function sayLeave() { try { if (ws && ws.readyState === 1) ws.send('{"type":"leave"}'); } catch {} }
-$('styleToggle').onclick = () => setStyle(dispStyle === 'border' ? 'full' : 'border');
 $('leave').onclick = () => { sayLeave(); manualClose = true; ws?.close(); clearInterval(pingTimer); $('tally').style.display='none'; $('setup').style.display='flex'; };
 addEventListener('pagehide', sayLeave); addEventListener('beforeunload', sayLeave);
 let manualClose = false;
@@ -149,41 +207,38 @@ function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.onopen = () => { ws.send(JSON.stringify({type:'join', role:'phone', room, cam}));
-    const mode = /onrender\.com|^https:/.test(location.host + '|' + location.protocol) && location.protocol === 'https:' ? '🌐 온라인' : '📡 오프라인(같은 Wi-Fi)';
-    $('conn').textContent = `방 ${room} · 연결됨 · ${mode}`;
+    connMode = (location.protocol === 'https:') ? 'online' : 'offline';
+    renderConn();
     pingTimer = setInterval(()=>ws.readyState===1 && ws.send('{"type":"ping"}'), 8000); };
   ws.onmessage = e => { const d = JSON.parse(e.data);
     if (d.type === 'tally') render(d);
     else if (d.type === 'msg') showMsg(d);
     else if (d.type === 'timer') setTimer(d); };
-  ws.onclose = () => { clearInterval(pingTimer); if (manualClose) { manualClose = false; return; } setTally('off', '연결 끊김'); $('conn').textContent = '재연결 중…'; setTimeout(connect, 2000); };
+  ws.onclose = () => { clearInterval(pingTimer); if (manualClose) { manualClose = false; return; } setTally('off', 'disconnected'); connMode = null; $('conn').textContent = t('reconnecting'); setTimeout(connect, 2000); };
   ws.onerror = () => ws.close();
 }
 function render(d) {
   $('pgmNo').textContent = d.program || '-'; $('pvwNo').textContent = d.preview || '-';
-  if (!d.online) return setTally('off', 'ATEM 오프라인');
-  if (d.program === cam) { setTally('pgm', 'ON AIR'); navigator.vibrate?.(200); }
-  else if (d.preview === cam) setTally('pvw', 'PREVIEW');
-  else setTally('idle', '대기');
+  if (!d.online) return setTally('off', 'atemOff');
+  if (d.program === cam) { setTally('pgm', 'onair'); navigator.vibrate?.(200); }
+  else if (d.preview === cam) setTally('pvw', 'preview');
+  else setTally('idle', 'standby');
 }
-function setTally(cls, txt) { curState = cls; $('tally').className = cls + (dispStyle === 'border' ? ' mode-border' : ''); $('status').textContent = txt; }
+function setTally(cls, statusKey) { curState = cls; curStatusKey = statusKey; $('tally').className = cls + (dispStyle === 'border' ? ' mode-border' : ''); $('status').textContent = t(statusKey); }
 
-// ---- 공지 메시지 ----
 let lastMsgTs = 0;
 function showMsg(d) {
   const box = $('msg');
-  if (!d.text) { box.className = 'empty'; $('msgText').textContent = '공지 없음'; lastMsgTs = d.ts || 0; return; }
+  if (!d.text) { box.className = 'empty'; $('msgText').textContent = t('noNotice'); lastMsgTs = d.ts || 0; return; }
   $('msgText').textContent = d.text; box.className = '';
   if (d.ts && d.ts !== lastMsgTs) { navigator.vibrate?.([100, 60, 100]); box.classList.add('new'); setTimeout(() => box.classList.remove('new'), 600); }
   lastMsgTs = d.ts || 0;
 }
 
-// ---- 시계 / 목표 시각 / 타이머 ----
-let timer = { running: false, end: 0, remain: 0, target: 0 }, clockOffset = 0; // clockOffset = 서버시각 - 내 시각
+let timer = { running: false, end: 0, remain: 0, target: 0 }, clockOffset = 0;
 function setTimer(d) { timer = d; if (d.now) clockOffset = d.now - Date.now(); tick(); }
 const pad = n => String(n).padStart(2, '0');
 function fmt(ms, showH) {
-  // 초과(음수)는 "+MM:SS" 로 초과 시간을 표시
   const over = ms < 0; ms = Math.abs(ms); const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
   return (over ? '+' : '') + (h || showH ? `${h}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`);
@@ -194,25 +249,26 @@ function tick() {
   const srvNow = Date.now() + clockOffset;
   const tt = $('targetTile');
   if (timer.target) {
-    const left = timer.target - srvNow, t = new Date(timer.target);
-    $('targetLabel').textContent = left < 0 ? `목표 ${pad(t.getHours())}:${pad(t.getMinutes())} 초과` : `목표 ${pad(t.getHours())}:${pad(t.getMinutes())} 까지`;
+    const left = timer.target - srvNow, td = new Date(timer.target);
+    const hhmm = `${pad(td.getHours())}:${pad(td.getMinutes())}`;
+    $('targetLabel').textContent = `${t('targetWord')} ${hhmm} ${left < 0 ? t('overWord') : t('untilWord')}`;
     $('targetLeft').textContent = fmt(left, true);
     tt.className = 'tile' + (left < 0 ? ' over' : left < 60000 ? ' warn' : '');
-  } else { $('targetLabel').textContent = '목표 시각'; $('targetLeft').textContent = '미설정'; tt.className = 'tile empty'; }
+  } else { $('targetLabel').textContent = t('targetTime'); $('targetLeft').textContent = t('unset'); tt.className = 'tile empty'; }
   const tm = $('timerTile');
   if (timer.running || timer.remain) {
     const left = timer.running ? timer.end - srvNow : timer.remain;
-    $('timerLeft').textContent = fmt(left);                       // 0 아래로 내려가면 +초과시간
-    $('timerLabel').textContent = (timer.running && left < 0) ? '타이머 초과' : '타이머';
+    $('timerLeft').textContent = fmt(left);
+    $('timerLabel').textContent = (timer.running && left < 0) ? t('timerOver') : t('timer');
     tm.className = 'tile' + (timer.running && left <= 0 ? ' over' : (timer.running && left < 10000 ? ' warn' : ''));
-  } else { $('timerLeft').textContent = '미설정'; $('timerLabel').textContent = '타이머'; tm.className = 'tile empty'; }
+  } else { $('timerLeft').textContent = t('unset'); $('timerLabel').textContent = t('timer'); tm.className = 'tile empty'; }
 }
-setInterval(tick, 250); tick();
+setInterval(tick, 250);
 async function keepAwake() {
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { keepAwake(); if (ws && ws.readyState !== 1 && $('tally').style.display === 'flex') connect(); } });
 }
-applyStyle();
+applyLang();
 if ($('room').value && $('cam').value && qs.get('auto')) $('go').click();
 </script>
 </body>
