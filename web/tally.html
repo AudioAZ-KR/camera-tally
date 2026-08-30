@@ -259,12 +259,13 @@ $('go').onclick = () => {
 function sayLeave() { try { if (ws && ws.readyState === 1) ws.send('{"type":"leave"}'); } catch {} }
 $('leave').onclick = () => { sayLeave(); manualClose = true; ws?.close(); clearInterval(pingTimer); $('tally').style.display='none'; $('setup').style.display='flex'; };
 addEventListener('pagehide', sayLeave); addEventListener('beforeunload', sayLeave);
-let manualClose = false;
+let manualClose = false, discTimer = null;   // discTimer: 끊김 표시 유예(짧은 순단은 표시 안 함)
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onopen = () => { ws.send(JSON.stringify({type:'join', role:'phone', room, cam}));
+  ws.onopen = () => { if (discTimer) { clearTimeout(discTimer); discTimer = null; }
+    ws.send(JSON.stringify({type:'join', role:'phone', room, cam}));
     connMode = (location.protocol === 'https:') ? 'online' : 'offline';
     renderConn();
     pingTimer = setInterval(()=>ws.readyState===1 && ws.send('{"type":"ping"}'), 8000); };
@@ -272,7 +273,10 @@ function connect() {
     if (d.type === 'tally') render(d);
     else if (d.type === 'msg') showMsg(d);
     else if (d.type === 'timer') setTimer(d); };
-  ws.onclose = () => { clearInterval(pingTimer); if (manualClose) { manualClose = false; return; } setTally('off', 'disconnected'); connMode = null; $('conn').textContent = t('reconnecting'); setTimeout(connect, 2000); };
+  ws.onclose = () => { clearInterval(pingTimer); if (manualClose) { manualClose = false; return; }
+    // 순단은 조용히 재연결(화면 유지). 7초 넘게 복구 안 되면 그때 '연결 끊김' 표시
+    if (!discTimer) discTimer = setTimeout(() => { discTimer = null; setTally('off', 'disconnected'); connMode = null; $('conn').textContent = t('reconnecting'); }, 7000);
+    setTimeout(connect, 1000); };
   ws.onerror = () => ws.close();
 }
 function render(d) {
